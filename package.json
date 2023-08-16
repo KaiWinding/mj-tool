@@ -1,0 +1,15 @@
+{
+  "name": "mj-tool",
+  "version": "0.5.0",
+  "description": "This is a tool for batch processing requests to the Midjourney API",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node src/index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "midjourney": "^4.3.11"
+  }
+}
