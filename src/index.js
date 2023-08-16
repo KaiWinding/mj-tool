@@ -4,10 +4,11 @@ const path = require("path");
 const accountList = require("../config/account.json");
 let globalPromptPool = [];
 
-let curPromise;
+const firstClass = "肖像";
+const DELIMITER = "|--|";
 
-async function asyncPool({ client, arr, success, limit, desc }) {
-  success = success || cb;
+async function asyncPool({ client, arr, success, limit, accountDesc }) {
+  success = success || successCallback;
   arr = arr || globalPromptPool;
   limit = limit || 10;
   let args = [...arr]; //不修改原参数数组
@@ -30,7 +31,7 @@ async function asyncPool({ client, arr, success, limit, desc }) {
           })
           .then(
             (val) => {
-              success(val, desc, v);
+              success(val, accountDesc, v);
             },
             (err) => {
               console.log(`An error occurred: ${v.prompt}`);
@@ -58,9 +59,25 @@ async function asyncPool({ client, arr, success, limit, desc }) {
   });
 }
 
-const cb = (msg, desc, v) => {
+const successCallback = (msg, accountDesc, v) => {
   const filePath = path.join(__dirname, "../output/output.txt");
-  fs.appendFileSync(filePath, msg.uri + "  " + v.desc + "\n");
+  fs.appendFileSync(
+    filePath,
+    msg.uri +
+      "  " +
+      DELIMITER +
+      firstClass +
+      DELIMITER +
+      v.third +
+      DELIMITER +
+      `libraries/${v.second}/${v.third}/` +
+      DELIMITER +
+      v.second +
+      v.chineseTag +
+      DELIMITER +
+      v.prompt +
+      "\n"
+  );
 };
 
 function sleep(delay = 2000) {
@@ -86,9 +103,13 @@ async function main() {
     .filter((el) => el.length > 10)
     .map((el) => {
       const index = el.indexOf("|--|");
+      const tagList = el.slice(index).split("|--|");
       return {
         prompt: el.slice(0, index),
-        desc: el.slice(index),
+        second: tagList[1],
+        third: tagList[2],
+        chineseTag: tagList[3],
+        desc: tagList[4],
       };
     });
 
@@ -104,7 +125,7 @@ async function main() {
     asyncPool({
       client,
       limit: accountList[i].maxNum,
-      desc: accountList[i].desc,
+      accountDesc: accountList[i].desc,
     });
   }
 
