@@ -25,7 +25,7 @@ async function asyncPool({ client, arr, success, limit, desc }) {
 
         sleep();
         client
-          .Imagine(v, (uri) => {
+          .Imagine(v.prompt, (uri) => {
             console.log("loading123---", uri);
           })
           .then(
@@ -33,7 +33,7 @@ async function asyncPool({ client, arr, success, limit, desc }) {
               success(val, desc, v);
             },
             (err) => {
-              console.log(`An error occurred: ${v}`);
+              console.log(`An error occurred: ${v.prompt}`);
               args.push(v);
               const filePath = path.join(__dirname, "../output/error_log.txt");
               fs.appendFileSync(
@@ -58,12 +58,9 @@ async function asyncPool({ client, arr, success, limit, desc }) {
   });
 }
 
-const cb = (msg, desc, prompt) => {
+const cb = (msg, desc, v) => {
   const filePath = path.join(__dirname, "../output/output.txt");
-  fs.appendFileSync(
-    filePath,
-    desc + "==============" + msg.uri + `|--|` + prompt + "\n"
-  );
+  fs.appendFileSync(filePath, msg.uri + "  " + v.desc + "\n");
 };
 
 function sleep(delay = 2000) {
@@ -84,7 +81,16 @@ function sleep(delay = 2000) {
 async function main() {
   const filePath = path.join(__dirname, "../input/prompts_female.txt");
   const input = fs.readFileSync(filePath, "utf8");
-  globalPromptPool = input.split("\n").filter((el) => el.length > 10);
+  globalPromptPool = input
+    .split("\n")
+    .filter((el) => el.length > 10)
+    .map((el) => {
+      const index = el.indexOf("|--|");
+      return {
+        prompt: el.slice(0, index),
+        desc: el.slice(index),
+      };
+    });
 
   for (let i = 0; i < accountList.length; i++) {
     const client = new Midjourney({
