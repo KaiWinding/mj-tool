@@ -3,7 +3,9 @@ const { Midjourney } = require("midjourney");
 const path = require("path");
 const accountList = require("../config/account.json");
 const cluster = require("cluster");
+
 let globalPromptPool = [];
+let childIndex = "";
 
 const firstClass = "肖像";
 const DELIMITER = "|--|";
@@ -17,25 +19,27 @@ async function asyncPool({ client, arr, success, limit, accountDesc }) {
   let resultCount = 0; //结果的数量
 
   return new Promise((resolve) => {
-    async function run() {
+    async function run(delay) {
       while (runningCount < limit && args.length > 0) {
         runningCount++;
         let v = args.shift();
         if (args.length == 0) args = [...arr];
-        console.log("正在运行" + runningCount + "已完结" + resultCount);
-        console.log("v = ", v);
+        console.log(
+          childIndex + "正在运行" + runningCount + "已完结" + resultCount
+        );
+        console.log(childIndex + "v = ", v);
 
-        sleep();
+        sleep(delay);
         client
           .Imagine(v.prompt, (uri) => {
-            console.log("loading123---", uri);
+            console.log(childIndex + "loading123---", uri);
           })
           .then(
             (val) => {
               success(val, accountDesc, v);
             },
             (err) => {
-              console.log(`An error occurred: ${v.prompt}`);
+              console.log(childIndex + `An error occurred: ${v.prompt}`);
               args.push(v);
               const filePath = path.join(__dirname, "../output/error_log.txt");
               fs.appendFileSync(
@@ -61,7 +65,7 @@ async function asyncPool({ client, arr, success, limit, accountDesc }) {
           });
       }
     }
-    run();
+    run(5000);
   });
 }
 
@@ -86,7 +90,7 @@ const successCallback = (msg, accountDesc, v) => {
   );
 };
 
-function sleep(delay = 2000) {
+function sleep(delay = 1000) {
   const beginTime = new Date().getTime();
 
   while (new Date().getTime() - beginTime < delay) {}
@@ -120,15 +124,27 @@ async function main() {
     });
 
   if (cluster.isMaster) {
+    const childProcessPool = {};
+    const createWorker = (index) => {
+      const worker = cluster.fork({ accountIndex: index });
+
+      // 存储子进程的配置
+      childProcessPool[worker.id] = index;
+    };
+
     for (let i = 0; i < accountList.length; i++) {
-      cluster.fork({ accountIndex: i });
+      createWorker(i);
     }
 
     cluster.on("exit", (worker, code, signal) => {
       console.log(`Worker ${worker.process.pid} died`);
+
+      createWorker(childProcessPool[worker.id]);
+      delete childProcessPool[worker.id];
     });
   } else {
     const i = process.env.accountIndex;
+    childIndex = `This child index is ${i} ||`;
     const client = new Midjourney({
       ServerId: accountList[i].SERVER_ID,
       ChannelId: accountList[i].CHANNEL_ID,
@@ -136,7 +152,6 @@ async function main() {
       Debug: true,
     });
     await client.Connect();
-    console.log("accountList[i] = ", accountList[i]);
     asyncPool({
       client,
       limit: accountList[i].maxNum,
