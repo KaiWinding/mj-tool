@@ -13,23 +13,36 @@ const DELIMITER = "|--|";
 async function asyncPool({ client, arr, success, limit, accountDesc }) {
   success = success || successCallback;
   arr = arr || globalPromptPool;
-  limit = limit || 10;
+  limit = limit || 4;
   let args = [...arr]; //不修改原参数数组
   let runningCount = 0; //正在运行的数量
   let resultCount = 0; //结果的数量
+  let processIndex = 0;
 
   return new Promise((resolve) => {
-    async function run(delay) {
+    async function run(isInit, delay) {
+      console.log(
+        `let's go ! runningCount = ${runningCount}, resultCount = ${resultCount}， processIndex = ${processIndex}`
+      );
       while (runningCount < limit && args.length > 0) {
         runningCount++;
         let v = args.shift();
         if (args.length == 0) args = [...arr];
         console.log(
-          childIndex + "正在运行" + runningCount + "已完结" + resultCount
+          childIndex +
+            "正在运行" +
+            runningCount +
+            "已完结" +
+            resultCount +
+            "当前任务序列" +
+            processIndex++
         );
         console.log(childIndex + "v = ", v);
-
-        sleep(delay);
+        if (isInit) {
+          await sleep();
+        } else {
+          realSleep();
+        }
         client
           .Imagine(v.prompt, (uri) => {
             console.log(childIndex + "loading123---", uri);
@@ -44,7 +57,13 @@ async function asyncPool({ client, arr, success, limit, accountDesc }) {
               const filePath = path.join(__dirname, "../output/error_log.txt");
               fs.appendFileSync(
                 filePath,
-                resultCount +
+                childIndex +
+                  "正在运行" +
+                  runningCount +
+                  "已完结" +
+                  resultCount +
+                  "当前任务序列" +
+                  processIndex +
                   "=============" +
                   v.prompt +
                   "=============" +
@@ -65,7 +84,7 @@ async function asyncPool({ client, arr, success, limit, accountDesc }) {
           });
       }
     }
-    run(5000);
+    run(true);
   });
 }
 
@@ -90,20 +109,20 @@ const successCallback = (msg, accountDesc, v) => {
   );
 };
 
-function sleep(delay = 1000) {
+function realSleep(delay = 1000) {
   const beginTime = new Date().getTime();
 
   while (new Date().getTime() - beginTime < delay) {}
 }
 
-// function sleep(delay = 4000) {
-//   return new Promise((resolve) => {
-//     console.log("wait delay", delay);
-//     setTimeout(() => {
-//       resolve("");
-//     }, delay);
-//   });
-// }
+function sleep(delay = 3000) {
+  return new Promise((resolve) => {
+    console.log("wait delay", delay);
+    setTimeout(() => {
+      resolve("");
+    }, delay);
+  });
+}
 
 async function main() {
   const filePath = path.join(__dirname, "../input/prompts_female.txt");
@@ -154,7 +173,7 @@ async function main() {
     await client.Connect();
     asyncPool({
       client,
-      limit: accountList[i].maxNum,
+      limit: accountList[i].maxNum > 4 ? 4 : accountList[i].maxNum,
       accountDesc: accountList[i].desc,
     });
   }
