@@ -40,7 +40,12 @@ async function asyncPool({ client, arr, success, limit, accountDesc }) {
               const filePath = path.join(__dirname, "../output/error_log.txt");
               fs.appendFileSync(
                 filePath,
-                resultCount + "=============" + v + "=============" + err + "\n"
+                resultCount +
+                  "=============" +
+                  v.prompt +
+                  "=============" +
+                  err +
+                  "\n"
               );
             }
           )
