@@ -2,6 +2,7 @@ const fs = require("fs");
 const { Midjourney } = require("midjourney");
 const path = require("path");
 const accountList = require("../config/account.json");
+const cluster = require("cluster");
 let globalPromptPool = [];
 
 const firstClass = "肖像";
@@ -102,8 +103,8 @@ async function main() {
     .split("\n")
     .filter((el) => el.length > 10)
     .map((el) => {
-      const index = el.indexOf("|--|");
-      const tagList = el.slice(index).split("|--|");
+      const index = el.indexOf(DELIMITER);
+      const tagList = el.slice(index).split(DELIMITER);
       return {
         prompt: el.slice(0, index),
         second: tagList[1],
@@ -113,7 +114,16 @@ async function main() {
       };
     });
 
-  for (let i = 0; i < accountList.length; i++) {
+  if (cluster.isMaster) {
+    for (let i = 0; i < accountList.length; i++) {
+      cluster.fork({ accountIndex: i });
+    }
+
+    cluster.on("exit", (worker, code, signal) => {
+      console.log(`Worker ${worker.process.pid} died`);
+    });
+  } else {
+    const i = process.env.accountIndex;
     const client = new Midjourney({
       ServerId: accountList[i].SERVER_ID,
       ChannelId: accountList[i].CHANNEL_ID,
