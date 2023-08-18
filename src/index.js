@@ -15,6 +15,7 @@ const {
 
 let globalPromptPool = [];
 let childIndex = "";
+const scriptBeginTime = new Date();
 
 async function asyncPool({ client, arr, success, limit, accountDesc }) {
   success = success || successCallback;
@@ -24,6 +25,7 @@ async function asyncPool({ client, arr, success, limit, accountDesc }) {
   let runningCount = 0; //正在运行的数量
   let resultCount = 0; //结果的数量
   let processIndex = 0;
+  let successNum = 0;
 
   return new Promise((resolve) => {
     async function run(isInit, delay) {
@@ -54,6 +56,15 @@ async function asyncPool({ client, arr, success, limit, accountDesc }) {
           })
           .then(
             (val) => {
+              const curTime = new Date();
+              const milliseconds = curTime - scriptBeginTime;
+              const minutes = Math.floor(milliseconds / (1000 * 60)); // 转换为分钟并取整
+              log(
+                `用户${childIndex}的进程已经运行了${minutes}分钟,总任务数为${
+                  resultCount + 1
+                },成功生成${++successNum}张图片`
+              );
+
               success(val, accountDesc, v);
             },
             (err) => {
