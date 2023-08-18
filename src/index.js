@@ -3,12 +3,18 @@ const { Midjourney } = require("midjourney");
 const path = require("path");
 const accountList = require("../config/account.json");
 const cluster = require("cluster");
+const {
+  firstClass,
+  DELIMITER,
+  timeoutMs,
+  inputPromptsFilename,
+  outputFilename,
+  maxMJJobs,
+  logsFilename,
+} = require("../config");
 
 let globalPromptPool = [];
 let childIndex = "";
-
-const firstClass = "肖像";
-const DELIMITER = "|--|";
 
 async function asyncPool({ client, arr, success, limit, accountDesc }) {
   success = success || successCallback;
@@ -21,14 +27,14 @@ async function asyncPool({ client, arr, success, limit, accountDesc }) {
 
   return new Promise((resolve) => {
     async function run(isInit, delay) {
-      console.log(
+      log(
         `let's go ! runningCount = ${runningCount}, resultCount = ${resultCount}， processIndex = ${processIndex}`
       );
       while (runningCount < limit && args.length > 0) {
         runningCount++;
         let v = args.shift();
         if (args.length == 0) args = [...arr];
-        console.log(
+        log(
           childIndex +
             "正在运行" +
             runningCount +
@@ -37,22 +43,20 @@ async function asyncPool({ client, arr, success, limit, accountDesc }) {
             "当前任务序列" +
             processIndex++
         );
-        console.log(childIndex + "v = ", v);
         if (isInit) {
           await sleep();
         } else {
           realSleep();
         }
-        client
+        const newPromise = client
           .Imagine(v.prompt, (uri) => {
-            console.log(childIndex + "loading123---", uri);
+            log(childIndex + "loading123---", uri);
           })
           .then(
             (val) => {
               success(val, accountDesc, v);
             },
             (err) => {
-              console.log(childIndex + `An error occurred: ${v.prompt}`);
               args.push(v);
               const filePath = path.join(__dirname, "../output/error_log.txt");
               fs.appendFileSync(
@@ -71,25 +75,72 @@ async function asyncPool({ client, arr, success, limit, accountDesc }) {
                   "\n"
               );
             }
-          )
-          .finally(() => {
-            runningCount--;
-            resultCount++;
-            run();
-            // if (resultCount === arr.length) {  //这里之所以用resultCount做判断，而不用results的长度和args的长度，是因为这两个都不准确
-            //   resolve(results)
-            // } else {
-            //   run()
-            // }
-          });
+          );
+
+        withTimeout(newPromise, timeoutMs).finally(() => {
+          runningCount--;
+          resultCount++;
+          run();
+          // if (resultCount === arr.length) {  //这里之所以用resultCount做判断，而不用results的长度和args的长度，是因为这两个都不准确
+          //   resolve(results)
+          // } else {
+          //   run()
+          // }
+        });
       }
     }
     run(true);
   });
 }
 
+function log(message) {
+  const LOG_FILE_PATH = path.join(__dirname, `../output/${logsFilename}`);
+  const timestamp = new Date().toISOString();
+  const formattedMessage = `${timestamp}: ${message}\n`;
+
+  // Ensure the directory exists
+  if (!fs.existsSync(path.dirname(LOG_FILE_PATH))) {
+    fs.mkdirSync(path.dirname(LOG_FILE_PATH), { recursive: true });
+  }
+
+  // Append the message to the log file
+  fs.appendFileSync(LOG_FILE_PATH, formattedMessage);
+
+  // Check the number of lines and remove the first 500 lines if it exceeds 1000
+  const logContent = fs.readFileSync(LOG_FILE_PATH, "utf-8");
+  const lines = logContent.split("\n");
+
+  if (lines.length > 1000) {
+    const newContent = lines.slice(500).join("\n");
+    fs.writeFileSync(LOG_FILE_PATH, newContent);
+  }
+}
+
+function withTimeout(promise, timeoutMs = 60000 * 6) {
+  let timeout;
+
+  // 创建一个超时的 Promise
+  const timeoutPromise = new Promise((_, reject) => {
+    timeout = setTimeout(() => {
+      reject(new Error("Request timed out"));
+    }, timeoutMs);
+  });
+
+  // 使用 Promise.race 竞争两个 Promise：原始的 Promise 和超时的 Promise
+  return Promise.race([promise, timeoutPromise])
+    .then((result) => {
+      clearTimeout(timeout); // 清除超时
+      return result;
+    })
+    .catch((error) => {
+      clearTimeout(timeout); // 清除超时
+      throw error;
+    });
+}
+
+// 请求成功的回调
 const successCallback = (msg, accountDesc, v) => {
-  const filePath = path.join(__dirname, "../output/output.txt");
+  const filePath = path.join(__dirname, `../output/${outputFilename}`);
   fs.appendFileSync(
     filePath,
     msg.uri +
@@ -117,7 +168,6 @@ function realSleep(delay = 1000) {
 
 function sleep(delay = 3000) {
   return new Promise((resolve) => {
-    console.log("wait delay", delay);
     setTimeout(() => {
       resolve("");
     }, delay);
@@ -125,7 +175,7 @@ function sleep(delay = 3000) {
 }
 
 async function main() {
-  const filePath = path.join(__dirname, "../input/prompts_female.txt");
+  const filePath = path.join(__dirname, `../input/${inputPromptsFilename}`);
   const input = fs.readFileSync(filePath, "utf8");
   globalPromptPool = input
     .split("\n")
@@ -156,7 +206,7 @@ async function main() {
     }
 
     cluster.on("exit", (worker, code, signal) => {
-      console.log(`Worker ${worker.process.pid} died`);
+      log(`Worker ${worker.process.pid} died`);
 
       createWorker(childProcessPool[worker.id]);
       delete childProcessPool[worker.id];
@@ -164,6 +214,7 @@ async function main() {
   } else {
     const i = process.env.accountIndex;
     childIndex = `This child index is ${i} ||`;
+    log("childProcessPool = ", accountList[i]);
     const client = new Midjourney({
       ServerId: accountList[i].SERVER_ID,
       ChannelId: accountList[i].CHANNEL_ID,
@@ -173,24 +224,14 @@ async function main() {
     await client.Connect();
     asyncPool({
       client,
-      limit: accountList[i].maxNum > 4 ? 4 : accountList[i].maxNum,
+      limit:
+        accountList[i].maxNum > maxMJJobs ? maxMJJobs : accountList[i].maxNum,
       accountDesc: accountList[i].desc,
     });
   }
 
   // await client.Connect();
 
-  // const fn = client;
-
-  // for (let i = 0; i < 2; i++) {
-  //   client
-  //     .Imagine("asian princess in wes anderson style, dressed in local uniform in Azure Lagoon, epic shot , --ar 16:9 --no glasses --stylize 400 --q .5 --v 5.2", (uri) => {
-  //       console.log("loading123---", uri);
-  //     })
-  //     .then(function (msg) {
-  //       console.log("msg123", msg);
-  //     });
-  // }
   // client
   //   .Imagine(
   //     "asian princess in wes anderson style, dressed in local uniform in Azure Lagoon, epic shot , --ar 16:9 --no glasses --stylize 400 --q .5 --v 5.2",
@@ -201,15 +242,14 @@ async function main() {
   //   .then(function (msg) {
   //     console.log("msg123", msg);
   //   });
-  // asyncPool(client, prompt, cb);
 }
 main()
   .then(() => {
-    console.log("finished");
+    log("finished");
     // process.exit(0);
   })
   .catch((err) => {
-    console.log("error finished");
+    log("error finished");
     console.error(err);
     process.exit(1);
   });
