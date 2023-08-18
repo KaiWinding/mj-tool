@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "pm2 start src/index.js",
-    "kill": "pm2 delete src/index.js",
+    "kill": "pm2 kill",
     "show": "pm2 list"
   },
   "author": "",
