@@ -224,7 +224,8 @@ async function main() {
     });
   } else {
     const i = process.env.accountIndex;
-    childIndex = `This child index is ${i} ||`;
+    const accountDesc = accountList[i].desc ? `(${accountList[i].desc})` : ``;
+    childIndex = `${accountDesc} 用户序号 ${i} || `;
     log("childProcessPool = ", accountList[i]);
     const client = new Midjourney({
       ServerId: accountList[i].SERVER_ID,
