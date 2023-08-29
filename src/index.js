@@ -48,7 +48,7 @@ async function asyncPool({ client, arr, success, limit, accountDesc }) {
         if (isInit) {
           await sleep();
         } else {
-          realSleep();
+          randomSleep();
         }
         const newPromise = client
           .Imagine(v.prompt, (uri) => {
@@ -183,6 +183,11 @@ function sleep(delay = 3000) {
       resolve("");
     }, delay);
   });
+}
+
+function randomSleep(max = 4 * 60000, min = 60000) {
+  const time = Math.floor(Math.random() * (max - min + 1)) + min;
+  sleep(time);
 }
 
 async function main() {
